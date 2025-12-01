@@ -2,102 +2,154 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1,user-scalable=no">
-<title>タイムショックポーズ当てゲーム</title>
-
+<title>タイムショック ポーズ当てゲーム（iPhone最適化）</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <style>
-  body{
-    margin:0;
-    padding:0;
-    font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif;
-    background:#ffffff;
+  body {
+    background:#fff;
     text-align:center;
-    overflow-x:hidden; /* 横スクロール禁止 */
+    margin:0;
+    font-family:-apple-system;
+    overflow-x:hidden;
   }
 
-  h2{ margin:15px 0 10px; font-size:20px; }
+  h2 { margin:12px 0 4px; font-size:22px; font-weight:bold; }
 
-  /* ゲーム領域余白ゼロ */
-  #gameArea{
-    width:100vw;
-    max-width:100%;
-    margin:0 auto;
-    padding:0;
-  }
-
-  /* キャンバスを画面いっぱいに */
+  /* 🔥 キャンバス（縮小対象・画像サイズはそのまま） */
   #gameCanvas{
-    width:100vw;
-    max-width:100%;
     background:#fff;
     display:block;
-    margin:0 auto;
-    border:none;
+    margin:15px auto 0;
+    border:2px solid #ddd;
+    border-radius:10px;
+    width:400px;
+    height:650px;
   }
 
-  #info{
-    font-size:14px;
-    margin-top:6px;
-    color:#333;
+  /* 📱 iPhone表示時は自動で全体縮小（画像は実寸のまま） */
+  @media (max-width: 430px){
+    #gameCanvas{
+      transform: scale(.82); /* ←この数字だけで縮小率調整可能 */
+      transform-origin: top center;
+    }
   }
+
+  #info{font-size:15px;margin-top:4px;}
+  #message{margin-top:4px;font-size:14px;font-weight:600;min-height:1.4em;}
 
   button{
-    width:80%;
-    max-width:300px;
-    padding:12px;
-    border-radius:30px;
-    font-size:18px;
-    font-weight:bold;
-    border:none;
+    margin-top:12px;
+    padding:12px 24px;
+    font-size:20px;
+    border-radius:50px;
     background:#000;
     color:#fff;
-    margin:15px auto 30px;
-    display:block;
+    border:none;
   }
-
-  button:active{ opacity:.7; }
 </style>
 </head>
 <body>
 
 <h2>▶ タイムショック ポーズ当てゲーム</h2>
+<canvas id="gameCanvas" width="400" height="650"></canvas>
 
-<div id="gameArea">
-  <canvas id="gameCanvas"></canvas>
-</div>
-
-<p id="info">ラウンド: <span id="round">0</span>/5　
-スコア: <span id="score">0</span> 点<br>スタートで開始！</p>
+<div id="info">ラウンド：<span id="round">0</span> / 5　スコア：<span id="score">0</span> 点</div>
+<div id="message">画像読み込み中…</div>
 
 <button id="startBtn">スタート / リトライ</button>
 
 <script>
-  const canvas = document.getElementById("gameCanvas");
-  const ctx = canvas.getContext("2d");
+/* === 基本設定 === */
+const cvs=document.getElementById("gameCanvas");
+const ctx=cvs.getContext("2d");
 
-  // ★ 画面幅に応じてキャンバス動的サイズ設定（余白消滅のキモ）
-  function resizeCanvas(){
-    canvas.width = window.innerWidth;
-    canvas.height = window.innerHeight*0.6; // 高さは自由に変更可
-    drawFrame();
-  }
-  window.addEventListener("resize", resizeCanvas);
-  resizeCanvas();
+const pose=new Image(); pose.src="pose.png";       // ←画像そのまま大
+const se=new Audio("timeshock.mp3");               // ←一致時の音声
 
-  // フレーム表示（左右赤線の位置も自由に調整可能）
-  function drawFrame(){
-    ctx.clearRect(0,0,canvas.width,canvas.height);
-    ctx.strokeStyle="rgba(255,0,0,0.4)";
-    ctx.lineWidth=4;
-    ctx.beginPath();
-    ctx.moveTo(canvas.width*0.20,0);
-    ctx.lineTo(canvas.width*0.20,canvas.height);
-    ctx.moveTo(canvas.width*0.80,0);
-    ctx.lineTo(canvas.width*0.80,canvas.height);
-    ctx.stroke();
-  }
+let loaded=false,playing=false,round=0,total=0;
+const MAX=5;
 
-  document.getElementById("startBtn").onclick = ()=>{ alert("ゲーム処理をここに追加できます！"); };
+/* 🔥 画像は縮小せず大きいまま維持 */
+let w=360, h=600;
+const centerX=cvs.width/2;
+let x=0;
+
+/* ↓ キャンバス縮小に合わせた自然なオフセット */
+const baseY=(cvs.height - h)/2 + 25;
+
+pose.onload=()=>{loaded=true;msg("スタートで開始！");draw();}
+
+/* === 描画 === */
+function draw(){
+  ctx.clearRect(0,0,cvs.width,cvs.height);
+
+  // ガイド
+  ctx.strokeStyle="rgba(0,0,0,0.12)";
+  ctx.beginPath(); ctx.moveTo(centerX,0); ctx.lineTo(centerX,cvs.height); ctx.stroke();
+
+  // 薄いシルエット（ターゲット）
+  ctx.globalAlpha=0.22;
+  ctx.drawImage(pose,centerX-w/2,baseY,w,h);
+  ctx.globalAlpha=1;
+
+  // 動く画像（センター基準）
+  ctx.drawImage(pose,x-w/2,baseY,w,h);
+}
+
+let speed=4;
+
+/* === ループ === */
+function loop(){
+  if(!playing)return;
+  x+=speed;
+  if(x>cvs.width+w/2) x=-w/2;
+  draw(); requestAnimationFrame(loop);
+}
+
+/* === ゲーム開始 === */
+function start(){
+  if(!loaded)return alert("読み込み中");
+  round=0; total=0; update();
+  next();
+}
+
+/* === Rごと === */
+function next(){
+  round++; if(round>MAX)return end();
+  msg(`ラウンド${round} → 中央で止めろ!`);
+  x=-200; speed=3+round*0.8;
+  playing=true; loop();
+}
+
+/* === 停止判定 === */
+function stop(){
+  if(!playing)return;
+  playing=false;
+
+  let diff=Math.abs(x-centerX);
+  let score= diff<10?100 : diff<28?70 : diff<50?40 :10;
+  total+=score; update();
+
+  if(score===100){
+    msg("🔥 完全一致！ +100");
+    se.currentTime=0; se.play();
+  }else msg(`+${score}点`);
+
+  if(round<MAX) setTimeout(next,900);
+  else setTimeout(end,900);
+}
+
+/* === END === */
+function end(){ playing=false; msg(`🎉終了！合計 ${total} 点`); }
+
+/* === 表示 === */
+function msg(t){ document.getElementById("message").textContent=t; }
+function update(){ document.getElementById("score").textContent=total; document.getElementById("round").textContent=round; }
+
+/* === 操作 === */
+startBtn.onclick=start;
+cvs.onclick=stop;
+onkeydown=e=>{ if(e.code==="Space")stop(); }
 </script>
 
 </body>
