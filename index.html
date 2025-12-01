@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>タイムショック ポーズ当てゲーム（完成版）</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<style>
+  body { 
+    background:#ffffff;
+    text-align:center;
+    margin:0; 
+    font-family:-apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif;
+  }
+  h2 { margin:12px 0 0; font-size:22px; font-weight:700; }
+  #gameCanvas{
+    background:#fff;
+    display:block;
+    margin:15px auto 0;
+    border:2px solid #ddd;
+    border-radius:10px;
+  }
+  #info{ font-size:15px; margin-top:6px; }
+  #message{ margin-top:4px; min-height:1.4em; font-size:14px; font-weight:600; }
+
+  button{
+    margin-top:12px;
+    padding:12px 24px;
+    font-size:20px;
+    border-radius:50px;
+    background:#111;
+    color:#fff;
+    border:none;
+    cursor:pointer;
+  }
+  button:active { transform:scale(0.97); }
+</style>
+</head>
+<body>
+
+<h2>▶ タイムショック ポーズ当てゲーム</h2>
+
+<canvas id="gameCanvas" width="400" height="650"></canvas>
+
+<div id="info">
+  ラウンド：<span id="round">0</span> / 5　
+  スコア：<span id="score">0</span> 点
+</div>
+<div id="message">画像読み込み中…</div>
+
+<button id="startBtn">スタート / リトライ</button>
+
+<script>
+/* === 設定 === */
+const cvs = document.getElementById("gameCanvas");
+const ctx = cvs.getContext("2d");
+
+const pose = new Image();
+pose.src="pose.png";           // ← 同じフォルダに置く
+const se_timeshock=new Audio("timeshock.mp3"); // ← 完全一致時鳴る音
+
+const MAX_ROUNDS=5;
+
+/* === 状態 === */
+let loaded=false, playing=false, round=0, totalScore=0;
+
+/* === 画像サイズ & 中央配置 === */
+let w=310, h=600;          // ← 画像大きめ
+let x=0;                   // 動きの中心座標で扱う
+const centerX=cvs.width/2; // 絶対センター基準
+const baseY=110;           // 上めに配置し画面に収める
+
+/* === UI取得 === */
+const roundEl=document.getElementById("round");
+const scoreEl=document.getElementById("score");
+const msgEl=document.getElementById("message");
+const startBtn=document.getElementById("startBtn");
+
+/* === 画像読み込み === */
+pose.onload=()=>{ loaded=true; msgEl.textContent="スタートで開始！"; draw(); };
+
+/* === 描画 === */
+function draw(){
+  ctx.clearRect(0,0,cvs.width,cvs.height);
+
+  // 中央ガイド線
+  ctx.strokeStyle="rgba(0,0,0,0.12)";
+  ctx.beginPath();
+  ctx.moveTo(centerX,0);
+  ctx.lineTo(centerX,cvs.height);
+  ctx.stroke();
+
+  // 中央ターゲット（薄く）
+  ctx.globalAlpha=0.23;
+  ctx.drawImage(pose,centerX-w/2,baseY,w,h);
+  ctx.globalAlpha=1;
+
+  // 動く像（中央基準）
+  ctx.drawImage(pose,x-w/2,baseY,w,h);
+}
+
+/* === アニメーション === */
+function loop(){
+  if(!playing)return;
+  x+=speed;
+  if(x>cvs.width+w/2)x=-w/2; // 画面外へ行ったらループ
+  draw();
+  requestAnimationFrame(loop);
+}
+
+/* === ゲーム開始 === */
+function startGame(){
+  if(!loaded) return alert("まだ画像読み込み中です");
+  round=0; totalScore=0;
+  scoreEl.textContent=totalScore;
+  nextRound();
+}
+
+/* === ラウンド開始 === */
+let speed=4;
+function nextRound(){
+  round++;
+  if(round>MAX_ROUNDS)return endGame();
+
+  roundEl.textContent=round;
+  msgEl.textContent=`ラウンド${round} ▷ 中央で止めろ！`;
+
+  x=-200;
+  speed=3+round*0.8; // ラウンドごと加速
+  playing=true;
+  loop();
+}
+
+/* === 停止判定 === */
+function stopAndJudge(){
+  if(!playing) return;
+  playing=false;
+
+  const diff=Math.abs(x-centerX);
+
+  // 判定
+  let score = diff< 10?100 :
+              diff< 25?70 :
+              diff< 45?40 :10;
+
+  totalScore+=score;
+  scoreEl.textContent=totalScore;
+
+  // 完全一致なら音声！
+  if(score===100){
+    msgEl.textContent="🔥 完全一致！ +100";
+    se_timeshock.currentTime=0;
+    se_timeshock.play();
+  }else{
+    msgEl.textContent = `+${score}点`;
+  }
+
+  // 次ラウンドへ
+  if(round<MAX_ROUNDS) setTimeout(nextRound,900);
+  else setTimeout(endGame,900);
+}
+
+/* === 終了 === */
+function endGame(){
+  playing=false;
+  msgEl.textContent=`🎉終了！ 合計 ${totalScore} 点！`;
+}
+
+/* === 操作 === */
+startBtn.onclick=startGame;
+cvs.onclick=stopAndJudge;
+onkeydown=e=>{ if(e.code==="Space") stopAndJudge(); }
+</script>
+
+</body>
+</html>
