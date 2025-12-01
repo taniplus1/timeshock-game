@@ -2,154 +2,221 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<title>タイムショック ポーズ当てゲーム（iPhone最適化）</title>
+<title>タイムショック ポーズ当てゲーム（音声付き）</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <style>
-  body {
-    background:#fff;
-    text-align:center;
-    margin:0;
-    font-family:-apple-system;
-    overflow-x:hidden;
+  body { 
+    background:#ffffff;
+    text-align:center; 
+    margin:0; 
+    font-family:-apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif;
   }
-
-  h2 { margin:12px 0 4px; font-size:22px; font-weight:bold; }
-
-  /* 🔥 キャンバス（縮小対象・画像サイズはそのまま） */
-  #gameCanvas{
-    background:#fff;
-    display:block;
-    margin:15px auto 0;
-    border:2px solid #ddd;
-    border-radius:10px;
-    width:400px;
-    height:650px;
-  }
-
-  /* 📱 iPhone表示時は自動で全体縮小（画像は実寸のまま） */
-  @media (max-width: 430px){
-    #gameCanvas{
-      transform: scale(.82); /* ←この数字だけで縮小率調整可能 */
-      transform-origin: top center;
-    }
-  }
-
-  #info{font-size:15px;margin-top:4px;}
-  #message{margin-top:4px;font-size:14px;font-weight:600;min-height:1.4em;}
-
-  button{
-    margin-top:12px;
-    padding:12px 24px;
+  h2 {
+    margin: 10px 0 0;
     font-size:20px;
-    border-radius:50px;
-    background:#000;
-    color:#fff;
+  }
+  #gameCanvas{
+    background:#ffffff;
+    display:block;
+    margin:10px auto 0;
+    border:2px solid #ddd; 
+    border-radius: 8px;
+  }
+  #info {
+    margin-top:8px;
+    font-size:14px;
+    line-height:1.6;
+  }
+  button{
+    margin-top:10px;
+    padding:10px 24px;
+    font-size:18px;
+    border-radius:999px;
     border:none;
+    background:#111;
+    color:#fff;
+    cursor:pointer;
+  }
+  button:active{ transform:scale(0.97); }
+  #message {
+    margin-top:6px;
+    min-height:1.5em;
+    font-size:14px;
   }
 </style>
 </head>
 <body>
 
 <h2>▶ タイムショック ポーズ当てゲーム</h2>
+
 <canvas id="gameCanvas" width="400" height="650"></canvas>
 
-<div id="info">ラウンド：<span id="round">0</span> / 5　スコア：<span id="score">0</span> 点</div>
-<div id="message">画像読み込み中…</div>
+<div id="info">
+  ラウンド：<span id="round">0</span> / 5　
+  スコア：<span id="score">0</span> 点
+  <div id="message">画像読み込み中です…</div>
+</div>
 
 <button id="startBtn">スタート / リトライ</button>
 
 <script>
-/* === 基本設定 === */
-const cvs=document.getElementById("gameCanvas");
-const ctx=cvs.getContext("2d");
+  const cvs = document.getElementById("gameCanvas");
+  const ctx = cvs.getContext("2d");
 
-const pose=new Image(); pose.src="pose.png";       // ←画像そのまま大
-const se=new Audio("timeshock.mp3");               // ←一致時の音声
+  const pose = new Image();
+  pose.src = "pose.png";     // ← 同じフォルダ内の pose.png
 
-let loaded=false,playing=false,round=0,total=0;
-const MAX=5;
+  // ★「タイムショック！」音声
+  const timeshock = new Audio("timeshock.mp3");
 
-/* 🔥 画像は縮小せず大きいまま維持 */
-let w=360, h=600;
-const centerX=cvs.width/2;
-let x=0;
+  const MAX_ROUNDS = 5;
 
-/* ↓ キャンバス縮小に合わせた自然なオフセット */
-const baseY=(cvs.height - h)/2 + 25;
+  let loaded = false;
+  let playing = false;
+  let round = 0;
+  let totalScore = 0;
 
-pose.onload=()=>{loaded=true;msg("スタートで開始！");draw();}
+  // キャラのパラメータ
+  let x = -300;
+  let speed = 4;
+  const targetX = 200;    // 画面中央あたり
+  const baseY  = 0;     // Y位置
+  const w = 300;
+  const h = 600;
 
-/* === 描画 === */
-function draw(){
-  ctx.clearRect(0,0,cvs.width,cvs.height);
+  const roundEl  = document.getElementById("round");
+  const scoreEl  = document.getElementById("score");
+  const msgEl    = document.getElementById("message");
+  const startBtn = document.getElementById("startBtn");
 
-  // ガイド
-  ctx.strokeStyle="rgba(0,0,0,0.12)";
-  ctx.beginPath(); ctx.moveTo(centerX,0); ctx.lineTo(centerX,cvs.height); ctx.stroke();
+  // 画像読み込み
+  pose.onload = () => {
+    loaded = true;
+    msgEl.textContent = "スタートボタンを押してゲーム開始！";
+    draw();
+  };
 
-  // 薄いシルエット（ターゲット）
-  ctx.globalAlpha=0.22;
-  ctx.drawImage(pose,centerX-w/2,baseY,w,h);
-  ctx.globalAlpha=1;
+  pose.onerror = () => {
+    msgEl.textContent = "pose.png が読み込めません。名前と場所を確認してください。";
+    alert("pose.png が読み込めていません。\nindex.html と同じフォルダに置き、ファイル名を『pose.png』にしてください。");
+  };
 
-  // 動く画像（センター基準）
-  ctx.drawImage(pose,x-w/2,baseY,w,h);
-}
+  // 描画処理
+  function draw() {
+    ctx.clearRect(0, 0, cvs.width, cvs.height);
 
-let speed=4;
+    // ガイドライン（中央）
+    ctx.strokeStyle = "rgba(0,0,0,0.1)";
+    ctx.beginPath();
+    ctx.moveTo(cvs.width / 2, 0);
+    ctx.lineTo(cvs.width / 2, cvs.height);
+    ctx.stroke();
 
-/* === ループ === */
-function loop(){
-  if(!playing)return;
-  x+=speed;
-  if(x>cvs.width+w/2) x=-w/2;
-  draw(); requestAnimationFrame(loop);
-}
+    // 中央の薄いターゲット
+    ctx.globalAlpha = 0.25;
+    ctx.drawImage(pose, targetX - w / 2, baseY, w, h);
+    ctx.globalAlpha = 1.0;
 
-/* === ゲーム開始 === */
-function start(){
-  if(!loaded)return alert("読み込み中");
-  round=0; total=0; update();
-  next();
-}
+    // 動いているキャラ
+    ctx.drawImage(pose, x, baseY, w, h);
+  }
 
-/* === Rごと === */
-function next(){
-  round++; if(round>MAX)return end();
-  msg(`ラウンド${round} → 中央で止めろ!`);
-  x=-200; speed=3+round*0.8;
-  playing=true; loop();
-}
+  // アニメーションループ
+  function loop() {
+    if (!playing) return;
 
-/* === 停止判定 === */
-function stop(){
-  if(!playing)return;
-  playing=false;
+    x += speed;
+    if (x > cvs.width) x = -w;
 
-  let diff=Math.abs(x-centerX);
-  let score= diff<10?100 : diff<28?70 : diff<50?40 :10;
-  total+=score; update();
+    draw();
+    requestAnimationFrame(loop);
+  }
 
-  if(score===100){
-    msg("🔥 完全一致！ +100");
-    se.currentTime=0; se.play();
-  }else msg(`+${score}点`);
+  // ゲーム開始
+  function startGame() {
+    if (!loaded) {
+      alert("pose.png の読み込み中です。少し待ってからもう一度押してください。");
+      return;
+    }
+    round = 0;
+    totalScore = 0;
+    scoreEl.textContent = totalScore;
+    nextRound();
+  }
 
-  if(round<MAX) setTimeout(next,900);
-  else setTimeout(end,900);
-}
+  // 各ラウンド開始
+  function nextRound() {
+    round++;
+    if (round > MAX_ROUNDS) {
+      endGame();
+      return;
+    }
 
-/* === END === */
-function end(){ playing=false; msg(`🎉終了！合計 ${total} 点`); }
+    roundEl.textContent = round;
+    msgEl.textContent = `ラウンド ${round}：動くポーズをよく見て、ここだ！でタップ or スペースキー！`;
 
-/* === 表示 === */
-function msg(t){ document.getElementById("message").textContent=t; }
-function update(){ document.getElementById("score").textContent=total; document.getElementById("round").textContent=round; }
+    x = -w;
+    speed = 3 + round * 0.7;
 
-/* === 操作 === */
-startBtn.onclick=start;
-cvs.onclick=stop;
-onkeydown=e=>{ if(e.code==="Space")stop(); }
+    playing = true;
+    loop();
+  }
+
+  // 停止＋判定
+  function stopAndJudge() {
+    if (!playing) return;
+    playing = false;
+
+    const diff = Math.abs(x - (targetX - w / 2)); // 左端同士の差
+
+    let score;
+    if (diff < 8)      score = 100;
+    else if (diff <20) score = 70;
+    else if (diff <40) score = 40;
+    else               score = 10;
+
+    totalScore += score;
+    scoreEl.textContent = totalScore;
+
+    // メッセージ＆音声
+    if (diff < 8) {
+      msgEl.textContent = `🔥 完全一致レベル！+${score}点`;
+      try {
+        timeshock.currentTime = 0;
+        timeshock.play();   // ★ここで「タイムショック！」再生
+      } catch(e) {
+        console.log("音声再生エラー:", e);
+      }
+    } else if (diff < 20) {
+      msgEl.textContent = `かなり近い！+${score}点`;
+    } else if (diff < 40) {
+      msgEl.textContent = `まずまず！+${score}点`;
+    } else {
+      msgEl.textContent = `まだズレてる… +${score}点`;
+    }
+
+    if (round < MAX_ROUNDS) {
+      setTimeout(nextRound, 1000);
+    } else {
+      setTimeout(endGame, 1000);
+    }
+  }
+
+  // ゲーム終了
+  function endGame() {
+    playing = false;
+    msgEl.textContent = `ゲーム終了！ 合計 ${totalScore} 点でした。`;
+  }
+
+  // イベント
+  startBtn.addEventListener("click", startGame);
+  cvs.addEventListener("pointerdown", stopAndJudge);
+  window.addEventListener("keydown", (e) => {
+    if (e.code === "Space") {
+      e.preventDefault();
+      stopAndJudge();
+    }
+  });
 </script>
 
 </body>
