@@ -63,24 +63,29 @@
   const cvs = document.getElementById("gameCanvas");
   const ctx = cvs.getContext("2d");
 
-  const pose = new Image();
-  pose.src = "pose.png";     // ← 同じフォルダ内の pose.png
+  // ★追加：背景画像（あなたが送ってくれた壁紙）
+  const bg = new Image();
+  bg.src = "background.png";  // ←壁紙のファイル名に合わせてね
 
-  // ★「タイムショック！」音声
+  const pose = new Image();
+  pose.src = "pose.png";
+
+  // 音声
   const timeshock = new Audio("timeshock.mp3");
 
   const MAX_ROUNDS = 5;
 
-  let loaded = false;
+  let loadedPose = false;
+  let loadedBg   = false;
   let playing = false;
   let round = 0;
   let totalScore = 0;
 
-  // キャラのパラメータ
+  // キャラパラメータ
   let x = -300;
   let speed = 4;
-  const targetX = 200;    // 画面中央あたり
-  const baseY  = 0;     // Y位置
+  const targetX = 200;
+  const baseY  = 20;
   const w = 300;
   const h = 600;
 
@@ -89,39 +94,62 @@
   const msgEl    = document.getElementById("message");
   const startBtn = document.getElementById("startBtn");
 
-  // 画像読み込み
+  // 読み込みチェック
+  function checkLoaded() {
+    if (loadedPose && loadedBg) {
+      msgEl.textContent = "スタートボタンで開始できます！";
+      draw();
+    }
+  }
+
+  // pose 画像読み込み
   pose.onload = () => {
-    loaded = true;
-    msgEl.textContent = "スタートボタンを押してゲーム開始！";
-    draw();
+    loadedPose = true;
+    checkLoaded();
   };
 
   pose.onerror = () => {
-    msgEl.textContent = "pose.png が読み込めません。名前と場所を確認してください。";
-    alert("pose.png が読み込めていません。\nindex.html と同じフォルダに置き、ファイル名を『pose.png』にしてください。");
+    msgEl.textContent = "pose.png が読み込めません。";
+    alert("pose.png が読み込めていません。同じフォルダに置いてください。");
   };
 
-  // 描画処理
+  // ★追加：背景画像読み込み
+  bg.onload = () => {
+    loadedBg = true;
+    checkLoaded();
+  };
+
+  bg.onerror = () => {
+    msgEl.textContent = "background.png が読み込めません。";
+    alert("背景画像が読み込めません。同じフォルダに置いてください。");
+  };
+
+  // 描画
   function draw() {
     ctx.clearRect(0, 0, cvs.width, cvs.height);
 
-    // ガイドライン（中央）
+    // ★追加：背景を全面に描画
+    if (loadedBg) {
+      ctx.drawImage(bg, 0, 0, cvs.width, cvs.height);
+    }
+
+    // ガイドライン
     ctx.strokeStyle = "rgba(0,0,0,0.1)";
     ctx.beginPath();
     ctx.moveTo(cvs.width / 2, 0);
     ctx.lineTo(cvs.width / 2, cvs.height);
     ctx.stroke();
 
-    // 中央の薄いターゲット
+    // 中央のターゲット
     ctx.globalAlpha = 0.25;
     ctx.drawImage(pose, targetX - w / 2, baseY, w, h);
     ctx.globalAlpha = 1.0;
 
-    // 動いているキャラ
+    // 動くキャラ
     ctx.drawImage(pose, x, baseY, w, h);
   }
 
-  // アニメーションループ
+  // アニメーション
   function loop() {
     if (!playing) return;
 
@@ -134,8 +162,8 @@
 
   // ゲーム開始
   function startGame() {
-    if (!loaded) {
-      alert("pose.png の読み込み中です。少し待ってからもう一度押してください。");
+    if (!loadedPose || !loadedBg) {
+      alert("画像読み込み中です。少し待ってください。");
       return;
     }
     round = 0;
@@ -144,7 +172,7 @@
     nextRound();
   }
 
-  // 各ラウンド開始
+  // ラウンド
   function nextRound() {
     round++;
     if (round > MAX_ROUNDS) {
@@ -153,7 +181,7 @@
     }
 
     roundEl.textContent = round;
-    msgEl.textContent = `ラウンド ${round}：動くポーズをよく見て、ここだ！でタップ or スペースキー！`;
+    msgEl.textContent = `ラウンド ${round}: タップ or スペースキーでストップ！`;
 
     x = -w;
     speed = 3 + round * 0.7;
@@ -162,14 +190,14 @@
     loop();
   }
 
-  // 停止＋判定
+  // 判定
   function stopAndJudge() {
     if (!playing) return;
     playing = false;
 
-    const diff = Math.abs(x - (targetX - w / 2)); // 左端同士の差
-
+    const diff = Math.abs(x - (targetX - w / 2));
     let score;
+
     if (diff < 8)      score = 100;
     else if (diff <20) score = 70;
     else if (diff <40) score = 40;
@@ -178,34 +206,22 @@
     totalScore += score;
     scoreEl.textContent = totalScore;
 
-    // メッセージ＆音声
     if (diff < 8) {
-      msgEl.textContent = `🔥 完全一致レベル！+${score}点`;
-      try {
-        timeshock.currentTime = 0;
-        timeshock.play();   // ★ここで「タイムショック！」再生
-      } catch(e) {
-        console.log("音声再生エラー:", e);
-      }
-    } else if (diff < 20) {
-      msgEl.textContent = `かなり近い！+${score}点`;
-    } else if (diff < 40) {
-      msgEl.textContent = `まずまず！+${score}点`;
-    } else {
-      msgEl.textContent = `まだズレてる… +${score}点`;
-    }
+      msgEl.textContent = `🔥 完全一致！ +${score}`;
+      timeshock.currentTime = 0;
+      timeshock.play();
+    } else if (diff < 20) msgEl.textContent = `かなり近い！ +${score}`;
+    else if (diff < 40) msgEl.textContent = `まずまず！ +${score}`;
+    else msgEl.textContent = `ズレてる… +${score}`;
 
-    if (round < MAX_ROUNDS) {
-      setTimeout(nextRound, 1000);
-    } else {
-      setTimeout(endGame, 1000);
-    }
+    if (round < MAX_ROUNDS) setTimeout(nextRound, 1000);
+    else setTimeout(endGame, 1000);
   }
 
-  // ゲーム終了
+  // 終了
   function endGame() {
     playing = false;
-    msgEl.textContent = `ゲーム終了！ 合計 ${totalScore} 点でした。`;
+    msgEl.textContent = `ゲーム終了！ 合計 ${totalScore} 点`;
   }
 
   // イベント
