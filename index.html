@@ -63,15 +63,17 @@
   const cvs = document.getElementById("gameCanvas");
   const ctx = cvs.getContext("2d");
 
-  // ★追加：背景画像（あなたが送ってくれた壁紙）
+  // 背景画像（タイムショック盤面）
   const bg = new Image();
-  bg.src = "background.png";  // ←壁紙のファイル名に合わせてね
+  bg.src = "background.png";
 
+  // ポーズ画像
   const pose = new Image();
   pose.src = "pose.png";
 
   // 音声
-  const timeshock = new Audio("timeshock.mp3");
+  const timeshock = new Audio("timeshock.mp3"); // 完全一致
+  const boo       = new Audio("boo.mp3");       // ハズレ
 
   const MAX_ROUNDS = 5;
 
@@ -85,7 +87,7 @@
   let x = -300;
   let speed = 4;
   const targetX = 200;
-  const baseY  = 20;
+  const baseY  = 0;
   const w = 300;
   const h = 600;
 
@@ -97,50 +99,32 @@
   // 読み込みチェック
   function checkLoaded() {
     if (loadedPose && loadedBg) {
-      msgEl.textContent = "スタートボタンで開始できます！";
+      msgEl.textContent = "スタートボタンでゲーム開始！";
       draw();
     }
   }
 
-  // pose 画像読み込み
-  pose.onload = () => {
-    loadedPose = true;
-    checkLoaded();
-  };
+  pose.onload = () => { loadedPose = true; checkLoaded(); };
+  bg.onload   = () => { loadedBg = true;   checkLoaded(); };
 
-  pose.onerror = () => {
-    msgEl.textContent = "pose.png が読み込めません。";
-    alert("pose.png が読み込めていません。同じフォルダに置いてください。");
-  };
-
-  // ★追加：背景画像読み込み
-  bg.onload = () => {
-    loadedBg = true;
-    checkLoaded();
-  };
-
-  bg.onerror = () => {
-    msgEl.textContent = "background.png が読み込めません。";
-    alert("背景画像が読み込めません。同じフォルダに置いてください。");
-  };
+  pose.onerror = () => alert("pose.png が読み込めません！");
+  bg.onerror   = () => alert("background.png が読み込めません！");
 
   // 描画
   function draw() {
     ctx.clearRect(0, 0, cvs.width, cvs.height);
 
-    // ★追加：背景を全面に描画
-    if (loadedBg) {
-      ctx.drawImage(bg, 0, 0, cvs.width, cvs.height);
-    }
+    // 背景
+    ctx.drawImage(bg, 0, 0, cvs.width, cvs.height);
 
-    // ガイドライン
-    ctx.strokeStyle = "rgba(0,0,0,0.1)";
+    // ガイドライン（中央）
+    ctx.strokeStyle = "rgba(0,0,0,0.15)";
     ctx.beginPath();
     ctx.moveTo(cvs.width / 2, 0);
     ctx.lineTo(cvs.width / 2, cvs.height);
     ctx.stroke();
 
-    // 中央のターゲット
+    // 中央の淡いターゲット
     ctx.globalAlpha = 0.25;
     ctx.drawImage(pose, targetX - w / 2, baseY, w, h);
     ctx.globalAlpha = 1.0;
@@ -163,7 +147,7 @@
   // ゲーム開始
   function startGame() {
     if (!loadedPose || !loadedBg) {
-      alert("画像読み込み中です。少し待ってください。");
+      alert("画像読み込み中です");
       return;
     }
     round = 0;
@@ -172,7 +156,7 @@
     nextRound();
   }
 
-  // ラウンド
+  // ラウンド開始
   function nextRound() {
     round++;
     if (round > MAX_ROUNDS) {
@@ -181,7 +165,7 @@
     }
 
     roundEl.textContent = round;
-    msgEl.textContent = `ラウンド ${round}: タップ or スペースキーでストップ！`;
+    msgEl.textContent = `ラウンド ${round}：ここだ！と思ったらタップ or スペースキー`;
 
     x = -w;
     speed = 3 + round * 0.7;
@@ -190,38 +174,44 @@
     loop();
   }
 
-  // 判定
+  // ★停止＋判定（今回の重要部分）
   function stopAndJudge() {
     if (!playing) return;
     playing = false;
 
-    const diff = Math.abs(x - (targetX - w / 2));
-    let score;
+    const diff = Math.abs(x - (targetX - w / 2)); 
 
-    if (diff < 8)      score = 100;
-    else if (diff <20) score = 70;
-    else if (diff <40) score = 40;
-    else               score = 10;
-
-    totalScore += score;
-    scoreEl.textContent = totalScore;
-
+    // ★完全一致（8px以内）だけ成功
     if (diff < 8) {
-      msgEl.textContent = `🔥 完全一致！ +${score}`;
-      timeshock.currentTime = 0;
-      timeshock.play();
-    } else if (diff < 20) msgEl.textContent = `かなり近い！ +${score}`;
-    else if (diff < 40) msgEl.textContent = `まずまず！ +${score}`;
-    else msgEl.textContent = `ズレてる… +${score}`;
+      totalScore += 100;
+      scoreEl.textContent = totalScore;
+      msgEl.textContent = `🔥 完全一致！！ +100点`;
 
-    if (round < MAX_ROUNDS) setTimeout(nextRound, 1000);
-    else setTimeout(endGame, 1000);
+      try {
+        timeshock.currentTime = 0;
+        timeshock.play();
+      } catch(e) {}
+
+    } else {
+      // ★少しでもズレたら全部ハズレ
+      msgEl.textContent = `❌ 少しズレてます…`;
+      try {
+        boo.currentTime = 0;
+        boo.play();
+      } catch(e) {}
+    }
+
+    if (round < MAX_ROUNDS) {
+      setTimeout(nextRound, 1000);
+    } else {
+      setTimeout(endGame, 1000);
+    }
   }
 
   // 終了
   function endGame() {
     playing = false;
-    msgEl.textContent = `ゲーム終了！ 合計 ${totalScore} 点`;
+    msgEl.textContent = `ゲーム終了！ 合計 ${totalScore} 点でした。`;
   }
 
   // イベント
